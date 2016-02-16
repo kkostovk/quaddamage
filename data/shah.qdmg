@@ -1,0 +1,75 @@
+GlobalSettings {
+	frameWidth          640
+	frameHeight         480
+	ambientLight (0.08, 0.08, 0.08)
+	interactive true
+	wantAA false
+}
+
+PointLight sun {
+	pos (-750, 1500, -750)
+	power 1200000
+}
+
+Camera camera {
+	position     (100, 2000, -4000)
+	aspectRatio   1.33333
+	yaw     0
+	pitch   -30
+	roll     0
+	fov     75
+//	focalPlaneDist 300
+//	fNumber 2.0
+//	dof     false
+//	numSamples 100
+}
+
+Mesh mesh {
+	file "geom/shahobj.obj"
+	faceted     false
+}
+
+Plane floor {
+	y      -0.01
+	limit    2000
+}
+
+CheckerTexture checker {
+	color1 (0.90, 0.90, 0.90)
+	color2 (0.05, 0.05, 0.05)
+	scaling 100000
+}
+
+Lambert checker_shader {
+	texture checker
+}
+
+Refl reflection {
+}
+
+Refr refraction {
+	ior 1.5
+}
+
+Fresnel fresnel {
+	ior 1.5
+}
+
+Layered glass {
+	layer refraction (1, 1, 1)
+	layer reflection (1, 1, 1) fresnel
+}
+
+//Node floor {
+//	geometry floor
+//	shader   checker_shader 
+//	//scale        (230, 230, 230)
+//}
+
+Node chess {
+	geometry mesh
+	shader checker_shader
+	scale        (230, 230, 230)
+	rotate       (135, 0, 0)
+	translate    (0, 0, 0) 
+}

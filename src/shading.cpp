@@ -46,7 +46,7 @@ Color CheckerTexture::sample(const IntersectionInfo& info)
 {
 	int x = (int) floor(info.u * scaling / 5.0);
 	int y = (int) floor(info.v * scaling / 5.0);
-	
+
 	Color checkerColor = ((x + y) % 2 == 0) ? color1 : color2;
 	return checkerColor;
 }
@@ -55,22 +55,18 @@ Color getLightContrib(const IntersectionInfo& info, const Vector& lightPos, cons
 {
 	double distanceToLightSqr = (info.ip - lightPos).lengthSqr();
 
-	if (!visibilityCheck(info.ip + info.normal * 1e-6, lightPos)) {
-		return Color(0, 0, 0);
-	} else {
-		return lightColor / distanceToLightSqr;
-	}
+    return lightColor / distanceToLightSqr;
 }
 
 Color Lambert::shade(const Ray& ray, const IntersectionInfo& info)
 {
 	Color diffuse = texture ? texture->sample(info) : this->color;
-	
+
 	Color result(0, 0, 0);
 	for (auto& light: scene.lights) {
 		int N = light->getNumSamples();
 		Color sum (0, 0, 0);
-		for (int i = 0; i < N; i++) {
+		for (int i = 0; i < 1; i++) {
 			Vector lightPos;
 			Color lightColor;
 			light->getNthSample(i, info.ip, lightPos, lightColor);
@@ -82,16 +78,16 @@ Color Lambert::shade(const Ray& ray, const IntersectionInfo& info)
 		}
 		result += sum / N;
 	}
-	result += scene.settings.ambientLight * diffuse;
+    result += scene.settings.ambientLight * diffuse;
 	return result;
-	
+
 }
 
 Color Lambert::eval(const IntersectionInfo& x, const Vector& w_in, const Vector& w_out)
 {
 	Color diffuse = texture ? texture->sample(x) : this->color;
 	Vector N = faceforward(w_in, x.normal);
-	
+
 		  /*color*/  /*BRDF*/   /*Kajiya's cosine term*/
 	return diffuse * (1 / PI)     *   dot(w_out, N);
 }
@@ -99,22 +95,22 @@ Color Lambert::eval(const IntersectionInfo& x, const Vector& w_in, const Vector&
 static Vector hemisphereSample(const Vector& normal)
 {
 	Random& rnd = getRandomGen();
-	
+
 	double u = rnd.randdouble();
 	double v = rnd.randdouble();
-	
+
 	double theta = 2 * PI * u;
 	double phi   = acos(2 * v - 1);
-	
+
 	Vector vec(
 		cos(theta) * sin(phi),
 		cos(phi),
 		sin(theta) * sin(phi)
 	);
-	
+
 	if (dot(vec, normal) < 0)
 		vec = -vec;
-		
+
 	return vec;
 }
 
@@ -123,14 +119,14 @@ void Lambert::spawnRay(const IntersectionInfo& x, const Vector& w_in,
 {
 	out_color = texture ? texture->sample(x) : this->color;
 	Vector N = faceforward(w_in, x.normal);
-	
+
 	w_out.dir = hemisphereSample(N);
 	w_out.flags |= RF_DIFFUSE;
 	w_out.start = x.ip + N * 1e-6;
-	
+
 	/*color*/    /*BRDF*/   /*Kajiya's cos term*/
 	out_color *= (1 / PI) * dot(w_out.dir, N);
-	
+
 	// 1/2PI since the ray probability is spread over the entire hemisphere:
 	pdf = 1 / (2 * PI);
 }
@@ -138,14 +134,14 @@ void Lambert::spawnRay(const IntersectionInfo& x, const Vector& w_in,
 
 Color Phong::shade(const Ray& ray, const IntersectionInfo& info)
 {
-	
+
 	Color diffuse = texture ? texture->sample(info) : this->color;
-	
+
 	Color result(0, 0, 0);
 	for (auto& light: scene.lights) {
-		int N = light->getNumSamples();
+		int N = 1;
 		Color sum (0, 0, 0);
-		for (int i = 0; i < N; i++) {
+		for (int i = 0; i < 1; i++) {
 			Vector lightPos;
 			Color lightColor;
 			light->getNthSample(i, info.ip, lightPos, lightColor);
@@ -163,7 +159,7 @@ Color Phong::shade(const Ray& ray, const IntersectionInfo& info)
 				phongCoeff = pow(cosGamma, specularExponent);
 			else
 				phongCoeff = 0;
-			
+
 			sum += diffuse * lambertCoeff * fromLight
 				  + (phongCoeff * specularMultiplier * fromLight);
 
@@ -172,14 +168,14 @@ Color Phong::shade(const Ray& ray, const IntersectionInfo& info)
 	}
 	result += scene.settings.ambientLight * diffuse;
 	return result;
-	
+
 }
 
 
 BitmapTexture::BitmapTexture()
 {
 	bitmap = new Bitmap();
-	scaling = 1.0; 
+	scaling = 1.0;
 	assumedGamma = 1;
 }
 BitmapTexture::~BitmapTexture() { delete bitmap; }
@@ -190,12 +186,12 @@ Color BitmapTexture::sample(const IntersectionInfo& info)
 	float y = fmod(info.v * scaling * bitmap->getHeight(), bitmap->getHeight());
 	if (x < 0) x += bitmap->getWidth();
 	if (y < 0) y += bitmap->getHeight();
-	
+
 	// 0 <= x < bitmap.width
 	// 0 <= y < bitmap.height
 	if (x < 0) x += bitmap->getWidth();
 	if (y < 0) y += bitmap->getHeight();
-	
+
 	return bitmap->getFilteredPixel(x, y);
 }
 
@@ -209,8 +205,8 @@ Color Refl::shade(const Ray& ray, const IntersectionInfo& info)
 		Ray newRay = ray;
 		newRay.start = info.ip + n * 0.000001;
 		newRay.dir = reflect(ray.dir, n);
-		newRay.depth++; 
-		
+		newRay.depth++;
+
 		return raytrace(newRay) * multiplier;
 	} else {
 		Random& rnd = getRandomGen();
@@ -222,20 +218,20 @@ Color Refl::shade(const Ray& ray, const IntersectionInfo& info)
 			Vector a, b;
 			orthonormalSystem(n, a, b);
 			double x, y, scaling;
-			
+
 			rnd.unitDiscSample(x, y);
 			//
 			scaling = tan((1 - glossiness) * PI/2);
 			x *= scaling;
 			y *= scaling;
-			
+
 			Vector modifiedNormal = n + a * x + b * y;
 
 			Ray newRay = ray;
 			newRay.start = info.ip + n * 0.000001;
 			newRay.dir = reflect(ray.dir, modifiedNormal);
-			newRay.depth++; 
-			
+			newRay.depth++;
+
 			result += raytrace(newRay) * multiplier;
 		}
 		return result / count;
@@ -417,11 +413,11 @@ void BumpTexture::modifyNormal(IntersectionInfo& info)
 	float y = fmod(info.v * scaling * bitmap->getHeight(), bitmap->getHeight());
 	if (x < 0) x += bitmap->getWidth();
 	if (y < 0) y += bitmap->getHeight();
-	
+
 	Color bump = bitmap->getFilteredPixel(x, y);
 	float dx = bump.r;
 	float dy = bump.g;
-	
+
 	info.normal += (info.dNdx * dx + info.dNdy * dy) * strength;
 	info.normal.normalize();
 }
@@ -439,7 +435,7 @@ void Bumps::modifyNormal(IntersectionInfo& data)
 		float intensityX[3] = { 0.1f, 0.08f, 0.05f }, intensityZ[3] = { 0.1f, 0.08f, 0.05f };
 		double dx = 0, dy = 0;
 		for (int i = 0; i < 3; i++) {
-			dx += sin(fm * freqX[i] * data.u) * intensityX[i] * strength; 
+			dx += sin(fm * freqX[i] * data.u) * intensityX[i] * strength;
 			dy += sin(fm * freqZ[i] * data.v) * intensityZ[i] * strength;
 		}
 		data.normal += dx * data.dNdx + dy * data.dNdy;

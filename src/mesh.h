@@ -42,7 +42,7 @@ struct KDTreeNode {
 		axis = AXIS_NONE;
 		this->triangles = new std::vector<int>(triangles);
 	}
-	
+
 	void initTreeNode(Axis axis, double splitPos)
 	{
 		this->axis = axis;
@@ -64,7 +64,7 @@ class Mesh: public Geometry {
 	std::vector<Vector> uvs;
 	std::vector<Triangle> triangles;
 	BBox bbox;
-	
+
 	KDTreeNode* kdroot;
 	bool useKDTree;
 	bool autoSmooth;
@@ -76,7 +76,7 @@ class Mesh: public Geometry {
 	void buildKD(KDTreeNode* node, BBox bbox, const std::vector<int>& triangleList, int depth);
 	bool intersectKD(KDTreeNode* node, const BBox& bbox, const RRay& ray, IntersectionInfo& info);
 public:
-	
+
 	bool faceted;
 	bool backfaceCulling;
 
@@ -88,9 +88,9 @@ public:
 		kdroot = NULL;
 	}
 	~Mesh();
-	
+
 	bool loadFromOBJ(const char* filename);
-	
+
 	void fillProperties(ParsedBlock& pb)
 	{
 		pb.getBoolProp("faceted", &faceted);
@@ -100,16 +100,16 @@ public:
 			if (!loadFromOBJ(fn)) {
 				pb.signalError("Could not parse OBJ file!");
 			}
-			
+
 		} else {
 			pb.requiredProp("file");
 		}
 		pb.getBoolProp("useKDTree", &useKDTree);
 		pb.getBoolProp("autoSmooth", &autoSmooth);
 	}
-	
+
 	void beginRender();
-	
+
 	bool intersect(const Ray& ray, IntersectionInfo& info);
 };
 

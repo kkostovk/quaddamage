@@ -15,13 +15,14 @@
 #include "scene.h"
 #include "lights.h"
 #include "cxxptl_sdl.h"
-
+#include "chess_logic.h"
 using std::vector;
 
 
 Color vfb[VFB_MAX_SIZE][VFB_MAX_SIZE];
 bool needsAA[VFB_MAX_SIZE][VFB_MAX_SIZE];
-
+Vector positions[8][8];
+GameBoard board;
 bool visibilityCheck(const Vector& start, const Vector& end);
 ThreadPool pool;
 
@@ -32,157 +33,29 @@ Color raytrace(const Ray& ray)
 	double closestDist = INF;
 	IntersectionInfo closestInfo;
 	for (auto& node: scene.nodes) {
+
+        if(!node->isInGame) continue;
+
 		IntersectionInfo info;
+
 		if (!node->intersect(ray, info)) continue;
-		
+
 		if (info.distance < closestDist) {
 			closestDist = info.distance;
 			closestNode = node;
 			closestInfo = info;
 		}
 	}
-	// check if the closest intersection point is actually a light:
-	bool hitLight = false;
-	Color hitLightColor;
-	for (auto& light: scene.lights) {
-		if (light->intersect(ray, closestDist)) {
-			hitLight = true;
-			hitLightColor = light->getColor();
-		}
-	}
-	if (hitLight) return hitLightColor;
 
 	// check if we hit the sky:
 	if (closestNode == NULL) {
 		if (scene.environment) return scene.environment->getEnvironment(ray.dir);
 		else return Color(0, 0, 0);
 	} else {
-		if ((ray.flags & RF_DEBUG) && ray.depth == 0)
-			printf("Found intersection at %.2lf\n", closestInfo.distance);
-		closestInfo.rayDir = ray.dir;
-		if (closestNode->bump)
-			closestNode->bump->modifyNormal(closestInfo);
 		return closestNode->shader->shade(ray, closestInfo);
 	}
 }
 
-Color explicitLightSample(const Ray& ray, const IntersectionInfo& info, const Color& pathMultiplier, Shader* shader, Random& rnd)
-{
-	// try to end a path by explicitly sampling a light. If there are no lights, we can't do that:
-	if (scene.lights.empty()) return Color(0, 0, 0);
-	
-	// choose a random light:
-	int lightIdx = rnd.randint(0, scene.lights.size() - 1);
-	Light* chosenLight = scene.lights[lightIdx];
-	
-	// evaluate light's solid angle as viewed from the intersection point, x:
-	Vector x = info.ip;
-	double solidAngle = chosenLight->solidAngle(x);
-	
-	// is light is too small or invisible?
-	if (solidAngle == 0) return Color(0, 0, 0);
-	
-	// choose a random point on the light:
-	int samplesInLight = chosenLight->getNumSamples();
-	int randSample = rnd.randint(0, samplesInLight - 1);
-	
-	Vector pointOnLight;
-	Color unused;
-	chosenLight->getNthSample(randSample, x, pointOnLight, unused);
-	
-	// camera -> ... path ... -> x -> lightPos
-	//                       are x and lightPos visible?
-	if (!visibilityCheck(x + info.normal * 1e-6, pointOnLight))
-		return Color(0, 0, 0);
-	
-	// get the emitted light energy (color * power):
-	Color L = chosenLight->getColor();
-	
-	
-	// evaluate BRDF. It might be zero (e.g., pure reflection), so bail out early if that's the case
-	Vector w_out = pointOnLight - x;
-	w_out.normalize();
-	Color brdfAtPoint = shader->eval(info, ray.dir, w_out);
-	if (brdfAtPoint.intensity() == 0) return Color(0, 0, 0);
-	
-	// probability to hit this light's projection on the hemisphere
-	// (conditional probability, since we're specifically aiming for this light):
-	float probHitLightArea = 1.0f / solidAngle;
-	
-	// probability to pick this light out of all N lights:
-	float probPickThisLight = 1.0f / scene.lights.size();
-	
-	// combined probability of this generated w_out ray:
-	float chooseLightProb = probHitLightArea * probPickThisLight;
-	
-	/* Light flux (Li) */ /* BRDFs@path*/  /*last BRDF*/ /*MC probability*/
-	return     L       *   pathMultiplier * brdfAtPoint / chooseLightProb;
-}
-
-Color pathtrace(Ray ray, const Color& pathMultiplier, Random& rnd)
-{
-	if (ray.depth > scene.settings.maxTraceDepth) return Color(0, 0, 0);
-	if (pathMultiplier.intensity() < 0.001f) return Color(0, 0, 0);
-	Node* closestNode = NULL;
-	double closestDist = INF;
-	IntersectionInfo closestInfo;
-	for (auto& node: scene.nodes) {
-		IntersectionInfo info;
-		if (!node->intersect(ray, info)) continue;
-		
-		if (info.distance < closestDist) {
-			closestDist = info.distance;
-			closestNode = node;
-			closestInfo = info;
-		}
-	}
-	// check if the closest intersection point is actually a light:
-	bool hitLight = false;
-	Color hitLightColor;
-	for (auto& light: scene.lights) {
-		if (light->intersect(ray, closestDist)) {
-			hitLight = true;
-			hitLightColor = light->getColor();
-		}
-	}
-	if (hitLight) {
-		if (!(ray.flags & RF_DIFFUSE)) {
-			// forbid light contributions after a diffuse reflection
-			return hitLightColor * pathMultiplier;
-		} else 
-			return Color(0, 0, 0);
-	}
-
-	// check if we hit the sky:
-	if (closestNode == NULL) {
-		if (scene.environment)
-			return scene.environment->getEnvironment(ray.dir) * pathMultiplier;
-		else return Color(0, 0, 0);
-	}
-	
-	closestInfo.rayDir = ray.dir;
-	if (closestNode->bump)
-		closestNode->bump->modifyNormal(closestInfo);
-	
-	// ("sampling the light"):
-	// try to end the current path with explicit sampling of some light
-	Color contribLight = explicitLightSample(ray, closestInfo, pathMultiplier, 
-											closestNode->shader, rnd);
-	// ("sampling the BRDF"):
-	// also try to extend the current path randomly: 
-	Ray w_out = ray;
-	w_out.depth++;
-	Color brdf;
-	float pdf;
-	closestNode->shader->spawnRay(closestInfo, ray.dir, w_out, brdf, pdf);
-	
-	if (pdf == -1) return Color(1, 0, 0); // BRDF not implemented
-	if (pdf == 0) return Color(0, 0, 0);  // BRDF is zero
-	
-	
-	Color contribGI = pathtrace(w_out, pathMultiplier * brdf / pdf, rnd);
-	return contribLight + contribGI;	
-}
 
 bool visibilityCheck(const Vector& start, const Vector& end)
 {
@@ -190,13 +63,16 @@ bool visibilityCheck(const Vector& start, const Vector& end)
 	ray.start = start;
 	ray.dir = end - start;
 	ray.dir.normalize();
-	
+
 	double targetDist = (end - start).length();
-	
+
 	for (auto& node: scene.nodes) {
+        if(node->isInGame) continue;
+
 		IntersectionInfo info;
+
 		if (!node->intersect(ray, info)) continue;
-		
+
 		if (info.distance < targetDist) {
 			return false;
 		}
@@ -213,108 +89,13 @@ void debugRayTrace(int x, int y)
 
 Color raytraceSinglePixel(double x, double y)
 {
-	auto getRay = scene.camera->dof ? 
-		[](double x, double y, int whichCamera) {
-			return scene.camera->getDOFRay(x, y, whichCamera);
-		} :
-		[](double x, double y, int whichCamera) {
-			return scene.camera->getScreenRay(x, y, whichCamera);
-		};
-	
-	auto trace = scene.settings.gi ? 
-		[](const Ray& ray) { 
-			Random& rnd = getRandomGen();
-			return pathtrace(ray, Color(1, 1, 1), rnd); 
-		} :
-		[](const Ray& ray) { 
-			return raytrace(ray); 
-		};
-		
-	if (scene.camera->stereoSeparation > 0) {
-		Ray leftRay = getRay(x, y, CAMERA_LEFT);
-		Ray rightRay= getRay(x, y, CAMERA_RIGHT);
-		Color colorLeft = trace(leftRay);
-		Color colorRight = trace(rightRay);
-		if (scene.settings.saturation != 1) {
-			colorLeft.adjustSaturation(scene.settings.saturation);
-			colorRight.adjustSaturation(scene.settings.saturation);
-		
-		}
-		return  colorLeft * scene.camera->leftMask 
-		      + colorRight* scene.camera->rightMask;
-	} else {
-		Ray ray = getRay(x, y, CAMERA_CENTRAL);
-		return trace(ray);
-	}
-}
-
-Color renderDOFPixel(int x, int y)
-{
-	Random& rnd = getRandomGen();
-	Color sum(0, 0, 0);
-	for (int i = 0; i < scene.camera->numSamples; i++) {
-		sum += raytraceSinglePixel(x + rnd.randdouble(), y + rnd.randdouble());
-	}
-	return sum / scene.camera->numSamples;
-}
-
-Color renderGIPixel(int x, int y)
-{
-	Color sum(0, 0, 0);
-	int N = scene.settings.numPaths;
-	
-	Random rnd = getRandomGen();
-	for (int i = 0; i < N; i++) {
-		Ray ray = scene.camera->getScreenRay(
-			x + rnd.randdouble(), y + rnd.randdouble()
-		);
-		sum += pathtrace(ray, Color(1, 1, 1), rnd); 
-	}
-	
-	return sum / N;
+    Ray ray = scene.camera->getScreenRay(x, y);
+    return raytrace(ray);
 }
 
 Color renderPixel(int x, int y)
 {
-	if (scene.camera->dof) {
-		return renderDOFPixel(x, y);
-	} else if (scene.settings.gi) {
-		return renderGIPixel(x, y);
-	} else {
-		return raytraceSinglePixel(x, y);
-	}
-}
-
-static void detectAApixels(const vector<Rect>& buckets)
-{
-	const int neighbours[8][2] = {
-		{ -1, -1 }, { 0, -1 }, { 1, -1 },
-		{ -1,  0 },            { 1,  0 },
-		{ -1,  1 }, { 0,  1 }, { 1,  1 }
-	};
-	int W = frameWidth(), H = frameHeight();
-	const float AA_THRESH = 0.1f;
-	for (auto& r: buckets) {
-		for (int y = r.y0; y < r.y1; y++)
-			for (int x = r.x0; x < r.x1; x++) {
-				needsAA[y][x] = false;
-				const Color& me = vfb[y][x];
-				for (int ni = 0; ni < COUNT_OF(neighbours); ni++) {
-					int neighX = x + neighbours[ni][0];
-					int neighY = y + neighbours[ni][1];
-					if (neighX < 0 || neighX >= W || neighY < 0 || neighY >= H) continue;
-					const Color& neighbour = vfb[neighY][neighX];
-					for (int channel = 0; channel < 3; channel++) {
-						if (fabs(min(1.0f, me[channel]) - min(1.0f, neighbour[channel])) > AA_THRESH) {
-							needsAA[y][x] = true;
-							break;
-						}
-					}
-					if (needsAA[y][x]) break;
-				}
-			}
-	}
-	markAApixels(needsAA);
+    return raytraceSinglePixel(x, y);
 }
 
 class RenderScreenTask: public Parallel {
@@ -334,7 +115,7 @@ struct MainRenderTask: public RenderScreenTask {
 	{
 		finalPass = !scene.settings.needAApass();
 	}
-	
+
 	void entry(int threadIdx, int threadCount)
 	{
 		int i;
@@ -354,13 +135,13 @@ struct MainRenderTask: public RenderScreenTask {
 // (as detected by detectAApixels()).
 struct RefineRenderTask: public RenderScreenTask {
 	RefineRenderTask(const vector<Rect>& buckets): RenderScreenTask(buckets) {}
-	
+
 	void entry(int threadIdx, int threadCount)
 	{
 		const double kernel[5][2] = {
 			// note that this sample is already rendered in vfb[][]:
-			{ 0.0, 0.0 }, 
-			
+			{ 0.0, 0.0 },
+
 			// refinement adds these samples:
 			{ 0.6, 0.0 },
 			{ 0.0, 0.6 },
@@ -373,13 +154,13 @@ struct RefineRenderTask: public RenderScreenTask {
 			// see if the bucket contains anything interesting at all:
 			bool skipBucket = true;
 			for (int y = r.y0; y < r.y1 && skipBucket; y++)
-				for (int x = r.x0; x < r.x1; x++) 
+				for (int x = r.x0; x < r.x1; x++)
 					if (needsAA[y][x]) {
 						skipBucket = false;
 						break;
 					}
 			if (skipBucket) continue;
-			
+
 			if (!markRegion(r)) return;
 			for (int y = r.y0; y < r.y1; y++)
 				for (int x = r.x0; x < r.x1; x++) {
@@ -398,34 +179,10 @@ void render()
 {
 	scene.beginFrame();
 	vector<Rect> buckets = getBucketsList();
-	
-	if (!scene.settings.interactive && (scene.settings.wantPrepass || scene.settings.gi)) {
-		// We render the whole screen in three passes.
-		// 1) First pass - use very coarse resolution rendering, tracing a single ray for a 16x16 block:
-		for (Rect& r: buckets) {
-			for (int dy = 0; dy < r.h; dy += 16) {
-				int ey = min(r.h, dy + 16);
-				for (int dx = 0; dx < r.w; dx += 16) {
-					int ex = min(r.w, dx + 16);
-					Color c = raytraceSinglePixel(r.x0 + dx + ex / 2, r.y0 + dy + ey / 2);
-					if (!drawRect(Rect(r.x0 + dx, r.y0 + dy, r.x0 + ex, r.y0 + ey), c))
-						return;
-				}
-			}
-		}
-	}
 
 	MainRenderTask mtrend(buckets);
 	pool.run(&mtrend, scene.settings.numThreads);
-	
-	if (scene.settings.needAApass()) {
-		// the previous render was without any anti-aliasing whatsoever, and the 
-		// scene file specifies that AA is desired. Detect edges here, and refine in another pass:
-		detectAApixels(buckets);
-		
-		RefineRenderTask refineTask(buckets);
-		pool.run(&refineTask, scene.settings.numThreads);
-	}
+
 }
 
 int renderSceneThread(void* /*unused*/)
@@ -435,32 +192,144 @@ int renderSceneThread(void* /*unused*/)
 	return 0;
 }
 
+Node* getFigure(const Ray& ray)
+{
+    Node* closestNode = NULL;
+	double closestDist = INF;
+	IntersectionInfo closestInfo;
+    IntersectionInfo info;
+
+    for(int i = 1; i < (int)scene.nodes.size(); ++i)
+    {
+        if(!scene.nodes[i]->isInGame) continue;
+
+        IntersectionInfo info;
+
+        if(!scene.nodes[i]->intersect(ray, info)) continue;
+
+        if (info.distance < closestDist)
+        {
+            closestDist = info.distance;
+            closestNode = scene.nodes[i];
+            closestInfo = info;
+        }
+
+    }
+
+    return closestNode;
+}
+
+void getSquare(const Vector& point, int& x, int&y)
+{
+    x = (int) floor(point[0] + 200) / 50;
+    y = (int) floor(point[2] + 200) / 50;
+}
+/*
+void renderSquare(std::vector<int>& bounds)
+{
+    for(int i = 0; i < 480; ++i)
+        for(int j = 0; j < 640; ++j)
+            vfb[i][j] = renderPixel(j, i);
+
+}
+
+void getSquareRender(Node* node, std::vector<int>& bounds)
+{
+    Vector v1 = ((Mesh&)(*node->geom)).bbox.vmin;
+    Vector v2 = ((Mesh&)(*node->geom)).bbox.vmax;
+    v1 = node->transform.point(v1);
+    v2 = node->transform.point(v2);
+}*/
+
+bool makeMove(Node* node, bool& running)
+{
+    SDL_Event event;
+
+    while (running)
+    {
+        while (SDL_PollEvent(&event))
+        {
+            switch (event.type)
+            {
+                case SDL_MOUSEBUTTONDOWN:
+                {
+                    int x, y;
+                    SDL_GetMouseState(&x, &y);
+
+                    Ray ray = scene.camera->getScreenRay(x, y);
+                    IntersectionInfo info;
+                    if(scene.nodes[0]->intersect(ray, info))
+                    {
+                        getSquare(info.ip, x, y);
+                        if(board.CanMakeAMove(node->x + 1, node->y + 1, x + 1, y + 1));
+                        {
+                            node->transform.translate(positions[x][y]);
+                            return true;
+                        }
+
+                        return false;
+                    }
+                   return false;
+                }
+                case SDL_QUIT:
+                    running = false;
+                    return false;
+                case SDL_KEYDOWN:
+                {
+                    switch (event.key.keysym.sym)
+                    {
+                        case SDLK_ESCAPE:
+                            running = false;
+                            return false;
+                        default:
+                            return false;
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+}
+
 void mainloop(void)
 {
-	SDL_ShowCursor(0);
+	SDL_ShowCursor(1);
 	bool running = true;
-	Camera& cam = *scene.camera;
-	const double MOVEMENT_PER_SEC = 20;
-	const double ROTATION_PER_SEC = 50;
-	const double SENSITIVITY = 0.1;
-	
-	while (running) {
-		Uint32 ticksSaved = SDL_GetTicks();
-		render();
+    render();
+
+	while (running)
+    {
 		displayVFB(vfb);
-		// timeDelta is how much time the frame took to render:
-		double timeDelta = (SDL_GetTicks() - ticksSaved) / 1000.0;
-		// 
-		SDL_Event ev;
-		
-		while (SDL_PollEvent(&ev)) {
-			switch (ev.type) {
+
+		SDL_Event event;
+
+		while (SDL_PollEvent(&event))
+        {
+			switch (event.type)
+			{
+                case SDL_MOUSEBUTTONDOWN:
+                {
+                    int x, y;
+                    SDL_GetMouseState(&x, &y);
+
+                    Ray ray = scene.camera->getScreenRay(x, y);
+                    Node *figure = getFigure(ray);
+
+                    if(!figure)
+                        continue;
+
+                    if(makeMove(figure, running))
+                        render();
+
+                    break;
+                }
 				case SDL_QUIT:
 					running = false;
 					break;
 				case SDL_KEYDOWN:
 				{
-					switch (ev.key.keysym.sym) {
+					switch (event.key.keysym.sym)
+					{
 						case SDLK_ESCAPE:
 							running = false;
 							break;
@@ -471,27 +340,52 @@ void mainloop(void)
 				}
 			}
 		}
-		
-		Uint8* keystate = SDL_GetKeyState(NULL);
-		double movement = MOVEMENT_PER_SEC * timeDelta;
-		double rotation = ROTATION_PER_SEC * timeDelta;
-		if (keystate[SDLK_UP]) cam.move(0, +movement);
-		if (keystate[SDLK_DOWN]) cam.move(0, -movement);
-		if (keystate[SDLK_LEFT]) cam.move(-movement, 0);
-		if (keystate[SDLK_RIGHT]) cam.move(+movement, 0);
-
-		if (keystate[SDLK_KP8]) cam.rotate(0, +rotation);
-		if (keystate[SDLK_KP2]) cam.rotate(0, -rotation);
-		if (keystate[SDLK_KP4]) cam.rotate(+rotation, 0);
-		if (keystate[SDLK_KP6]) cam.rotate(-rotation, 0);
-		
-		int deltax, deltay;
-		SDL_GetRelativeMouseState(&deltax, &deltay);
-		cam.rotate(-SENSITIVITY * deltax, -SENSITIVITY*deltay);
 	}
 }
 
-const char* DEFAULT_SCENE = "data/smallpt.qdmg";
+const char* DEFAULT_SCENE = "data/chess_setup.qdmg";
+
+void setupChess()
+{
+    for(int i = 0; i < 8; ++i)
+    {
+        for(int j = 0; j < 8; ++j)
+        {
+            positions[i][j]= {-175 + i * 50, 0, -175 + j * 50};
+        }
+    }
+
+    int indexX[] = {0, 7, 1, 6, 2, 5, 3, 4};
+
+    int index = 1;
+    for(int i = 0; i < 8; ++i)
+    {
+        scene.nodes[index]->x = i;
+        scene.nodes[index]->y = 1;
+        index++;
+    }
+
+    for(int i = 0; i < 8; ++i)
+    {
+        scene.nodes[index]->x = indexX[i];
+        scene.nodes[index]->y = 0;
+        index++;
+    }
+
+    for(int i = 0; i < 8; ++i)
+    {
+        scene.nodes[index]->x = i;
+        scene.nodes[index]->y = 6;
+        index++;
+    }
+
+    for(int i = 0; i < 8; ++i)
+    {
+        scene.nodes[index]->x = indexX[i];
+        scene.nodes[index]->y = 7;
+        index++;
+    }
+}
 
 int main ( int argc, char** argv )
 {
@@ -502,32 +396,22 @@ int main ( int argc, char** argv )
 		printf("Could not parse the scene!\n");
 		return -1;
 	}
-	
+
 	initGraphics(scene.settings.frameWidth, scene.settings.frameHeight,
 		scene.settings.interactive && scene.settings.fullscreen);
 	setWindowCaption("Quad Damage: preparing...");
-	
+
 	if (scene.settings.numThreads == 0)
 		scene.settings.numThreads = get_processor_count();
-	
+
 	pool.preload_threads(scene.settings.numThreads);
-	
+
 	scene.beginRender();
-	
-	if (scene.settings.interactive) {
-		mainloop();
-	} else {
-		
-		setWindowCaption("Quad Damage: rendering...");
-		Uint32 startTicks = SDL_GetTicks();
-		renderScene_threaded();
-		Uint32 elapsedMs = SDL_GetTicks() - startTicks;
-		printf("Render took %.2fs\n", elapsedMs / 1000.0f);
-		setWindowCaption("Quad Damage: rendered in %.2fs\n", elapsedMs / 1000.0f);
-		
-		displayVFB(vfb);
-		waitForUserExit();
-	}
+
+    setupChess();
+
+    mainloop();
+
 	closeGraphics();
 	printf("Exited cleanly\n");
 	return 0;

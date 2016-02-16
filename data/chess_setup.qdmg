@@ -1,0 +1,337 @@
+GlobalSettings {
+	frameWidth          640
+	frameHeight         480
+	ambientLight (0.08, 0.08, 0.08)
+	interactive true
+	numThreads 0
+	// if you want to render it interactively, but in a window, use
+	fullscreen false
+}
+
+PointLight sun {
+	pos (-750, 1200, -750)
+	power 1200000
+}
+
+Camera camera {
+	position     (0, 400, -300)
+	aspectRatio   1.33333
+	yaw      0
+	pitch   -55
+	roll     0
+	fov     75
+}
+
+Plane floor {
+	y      -0.01
+	limit   200
+}
+
+CheckerTexture checker {
+	color1 (0.70, 0.70, 0.70)
+	color2 (0.15, 0.15, 0.15)
+	scaling 0.1
+}
+
+Lambert checker_shader {
+	texture checker
+}
+
+Node floor {
+	geometry floor
+	shader   checker_shader 
+}
+
+Mesh bishop {
+	file        "chess/bishop.obj"
+//	faceted     false
+}
+
+Mesh pawn {
+	file        "chess/pawn.obj"
+}
+
+Mesh rook {
+	file        "chess/rook.obj"
+}
+
+Mesh king {
+	file        "chess/king.obj"
+}
+
+Mesh knight {
+	file        "chess/knight.obj"
+}
+
+Mesh queen {
+	file        "chess/queen.obj"
+}
+
+Lambert white {
+	color (0.9, 0.9, 0.9)
+}
+
+Lambert black {
+	color (0.1, 0.1, 0.1)
+}
+
+// White figures
+Node white_pawn1 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-175, 0, -125)
+}
+
+
+Node white_pawn2 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-125, 0, -125)
+}
+
+Node white_pawn3 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-75, 0, -125)
+}
+
+Node white_pawn4 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-25, 0, -125)
+}
+
+Node white_pawn5 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (25, 0, -125)
+}
+
+Node white_pawn6 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (75, 0, -125)
+}
+
+Node white_pawn7 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (125, 0, -125)
+}
+
+Node white_pawn8 {
+	geometry pawn
+	shader       white
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (175, 0, -125)
+}
+
+Node white_rook1 {
+	geometry rook
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (-175, 0, -175)
+}
+
+Node white_rook2 {
+	geometry rook
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (175, 0, -175)
+}
+
+Node white_knight1 {
+	geometry knight
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (-75, 0, 0)
+	translate    (-125, 0, -175)
+}
+
+Node white_knight1 {
+	geometry knight
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (-75, 0, 0)
+	translate    (125, 0, -175)
+}
+
+Node white_bishop1 {
+	geometry     bishop 
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (-75, 0, -175)
+}
+
+Node white_bishop2 {
+	geometry     bishop 
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (75, 0, -175)
+}
+
+Node white_queen {
+	geometry     queen 
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (-25, 0, -175)
+}
+
+Node white_king {
+	geometry     king 
+	shader       white
+	scale        (1, 1, 1)
+	rotate       (0, 0, 0)
+	translate    (25, 0, -175)
+}
+
+
+// Black figures
+
+Node black_pawn1 {
+	geometry pawn
+	shader       black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-175, 0, 125)
+}
+
+Node black_pawn2 {
+	geometry pawn
+	shader       black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-125, 0, 125)
+}
+
+Node black_pawn3 {
+	geometry pawn
+	shader       black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-75, 0, 125)
+}
+
+Node black_pawn4 {
+	geometry pawn
+	shader       black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (-25, 0, 125)
+}
+
+Node black_pawn5 {
+	geometry pawn
+	shader       black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (25, 0, 125)
+}
+
+Node black_pawn6 {
+	geometry pawn
+	shader       black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (75, 0, 125)
+}
+
+Node black_pawn7 {
+	geometry pawn
+	shader      black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (125, 0, 125)
+}
+
+Node black_pawn8 {
+	geometry pawn
+	shader       black
+	scale        (0.8, 0.8, 0.8)
+	rotate       (135, 0, 0)
+	translate    (175, 0, 125)
+}
+
+Node black_rook1 {
+	geometry rook
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (-175, 0, 175)
+}
+
+Node black_rook2 {
+	geometry rook
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (175, 0, 175)
+}
+
+Node black_knight1 {
+	geometry knight
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (75, 0, 0)
+	translate    (-125, 0, 175)
+}
+
+Node black_knight1 {
+	geometry knight
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (75, 0, 0)
+	translate    (125, 0, 175)
+}
+
+Node black_bishop1 {
+	geometry     bishop 
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (-75, 0, 175)
+}
+
+Node black_bishop2 {
+	geometry     bishop 
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (75, 0, 175)
+}
+
+Node black_queen {
+	geometry     queen 
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (135, 0, 0)
+	translate    (-25, 0, 175)
+}
+
+Node black_king {
+	geometry     king 
+	shader       black
+	scale        (1, 1, 1)
+	rotate       (0, 0, 0)
+	translate    (25, 0, 175)
+}
